@@ -1,0 +1,46 @@
+from flask import Flask, redirect, request
+import random
+
+app = Flask(__name__)
+
+# 模拟数据库：存储短链接与分流规则
+url_rules = {
+    "abtest": {
+        "versions": {
+            "A": "https://wa.me/447565642782",
+            "B": "https://wa.me/447402453051" 
+        },
+        "ratio": [50, 50], 
+        "user_map": {}       # 记录用户ID对应的版本（避免重复测试）
+    }
+}
+
+@app.route("/<short_code>")
+def ab_split(short_code):
+    rule = url_rules.get(short_code)
+    if not rule:
+        return "https://example.com/page/",
+    
+    user_id = request.cookies.get("user_id")  # 获取用户标识（如Cookie或IP）
+    if not user_id:
+        user_id = request.remote_addr  # 临时用IP标识用户
+    
+    # 按用户ID固定版本（确保同一用户看到相同版本）
+    if user_id not in rule["user_map"]:
+        # 根据比例随机分配
+        choice = random.choices(["A", "B"], weights=rule["ratio"], k=1)[0]
+        rule["user_map"][user_id] = choice
+    
+    target_url = rule["versions"][rule["user_map"][user_id]]
+    
+    # 添加UTM参数（如追踪来源）
+    utm_source = request.args.get("utm_source", "ab-test")
+    target_url += f"?utm_source={utm_source}"
+    
+    # 设置Cookie记录用户版本（可选）
+    response = redirect(target_url)
+    response.set_cookie("user_id", user_id, max_age=365*24*3600)
+    return response
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
